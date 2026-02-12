@@ -6,12 +6,42 @@ import bcrypt from "bcryptjs";
  * Helper endpoint to create admin user
  * This should be protected in production or removed after initial setup
  * 
- * Usage:
- * POST /api/admin/create
+ * GET /api/admin/create - Check existing admin users
+ * POST /api/admin/create - Create admin user
  * Body: { "email": "admin@example.com", "password": "your-password" }
  * 
  * Or it will use DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD from env vars
  */
+export async function GET() {
+  try {
+    const users = await prisma.adminUser.findMany({
+      select: {
+        id: true,
+        email: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({
+      count: users.length,
+      users: users,
+      message: users.length === 0 
+        ? "V databáze nie sú žiadni admin používatelia. Použite POST /api/admin/create na vytvorenie."
+        : `Našlo sa ${users.length} admin používateľ(ov).`,
+    });
+  } catch (error) {
+    console.error("Error checking admin users:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json(
+      { 
+        message: "Chyba pri kontrole admin používateľov.",
+        error: errorMessage 
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null);
