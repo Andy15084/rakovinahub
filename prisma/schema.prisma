@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Core article model with structured metadata for filtering.
+model Article {
+  id             String          @id @default(cuid())
+  title          String
+  slug           String          @unique
+  excerpt        String?
+  content        String
+
+  cancerType     String          /// Typ rakoviny (napr. „rakovina prsníka“)
+  stage          CancerStage?    /// Štádium, voliteľné
+  category       ArticleCategory /// Hlavná kategória obsahu
+  treatmentType  TreatmentType?  /// Typ liečby, ak relevantné
+
+  tags           String[]        /// Tagy pre vyhľadávanie
+
+  imageUrl       String?
+  videoUrl       String?
+
+  isDraft        Boolean         @default(true)
+  isPublished    Boolean         @default(false)
+  publishedAt    DateTime?       @default(now())
+
+  viewCount      Int             @default(0)
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([cancerType, category, stage])
+  @@index([treatmentType])
+  @@index([isPublished, publishedAt])
+}
+
+/// Basic admin user for protected /admin section.
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Štádium rakoviny.
+enum CancerStage {
+  STAGE_0
+  STAGE_I
+  STAGE_II
+  STAGE_III
+  STAGE_IV
+  UNKNOWN
+}
+
+/// Kategórie obsahu podľa špecifikácie.
+enum ArticleCategory {
+  DIAGNOSTICS          /// Diagnostika
+  TREATMENT            /// Liečba
+  SIDE_EFFECTS         /// Vedľajšie účinky
+  LIFE_DURING_TREATMENT/// Život počas liečby
+  PREVENTION           /// Prevencia
+  MENTAL_SUPPORT       /// Psychická podpora
+  SOCIAL_SUPPORT       /// Sociálna pomoc
+  GENERAL_INFO         /// Základné informácie
+  STAGE_SPECIFIC       /// Informácie podľa štádia
+  CLINICAL_TRIALS      /// Klinické štúdie
+  FAQ                  /// Často kladené otázky
+  SUPPORT_SERVICES     /// Pomoc a podpora
+}
+
+/// Typy liečby pre filtrovanie.
+enum TreatmentType {
+  DIAGNOSTICS          /// Diagnostika
+  BIOPSY               /// Biopsia
+  SURGERY              /// Operácia
+  CHEMOTHERAPY         /// Chemoterapia
+  RADIOTHERAPY         /// Rádioterapia
+  IMMUNOTHERAPY        /// Imunoterapia
+  TARGETED_THERAPY     /// Cielená liečba
+  HORMONE_THERAPY      /// Hormonálna liečba
+  FOLLOW_UP            /// Kontrolné vyšetrenia
+  REMISSION            /// Remisia a sledovanie
+}
