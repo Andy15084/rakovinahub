@@ -6,25 +6,36 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 async function getData() {
-  await ensureDefaultAdminUser();
+  try {
+    await ensureDefaultAdminUser();
+  } catch (error) {
+    console.error("Error ensuring default admin user:", error);
+    // Continue even if default admin creation fails
+  }
 
-  const [admin, articles] = await Promise.all([
-    getCurrentAdmin(),
-    prisma.article.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: {
-        id: true,
-        title: true,
-        cancerType: true,
-        category: true,
-        isPublished: true,
-        publishedAt: true,
-      },
-    }),
-  ]);
+  try {
+    const [admin, articles] = await Promise.all([
+      getCurrentAdmin(),
+      prisma.article.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          title: true,
+          cancerType: true,
+          category: true,
+          isPublished: true,
+          publishedAt: true,
+        },
+      }),
+    ]);
 
-  return { admin, articles };
+    return { admin, articles };
+  } catch (error) {
+    console.error("Error fetching admin data:", error);
+    // Return empty state if database query fails
+    return { admin: null, articles: [] };
+  }
 }
 
 export const dynamic = "force-dynamic";
@@ -53,9 +64,9 @@ export default async function AdminPage() {
               Odhlásiť sa
             </Button>
           </form>
-          <Button as-child>
-            <Link href="/admin/novy-clanok">Pridať článok</Link>
-          </Button>
+          <Link href="/admin/novy-clanok">
+            <Button>Pridať článok</Button>
+          </Link>
         </div>
       </div>
 
@@ -95,9 +106,9 @@ export default async function AdminPage() {
                 >
                   {article.isPublished ? "Publikovaný" : "Koncept"}
                 </span>
-                <Button as-child size="md" variant="ghost">
-                  <Link href={`/admin/clanky/${article.id}`}>Upraviť</Link>
-                </Button>
+                <Link href={`/admin/clanky/${article.id}`}>
+                  <Button size="md" variant="ghost">Upraviť</Button>
+                </Link>
               </div>
             </div>
           ))}

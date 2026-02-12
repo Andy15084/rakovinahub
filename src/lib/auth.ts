@@ -29,21 +29,30 @@ export async function authenticateAdmin(email: string, password: string) {
 }
 
 export async function ensureDefaultAdminUser() {
-  const email = process.env.DEFAULT_ADMIN_EMAIL;
-  const password = process.env.DEFAULT_ADMIN_PASSWORD;
+  try {
+    const email = process.env.DEFAULT_ADMIN_EMAIL;
+    const password = process.env.DEFAULT_ADMIN_PASSWORD;
 
-  if (!email || !password) return;
+    if (!email || !password) {
+      console.warn("DEFAULT_ADMIN_EMAIL or DEFAULT_ADMIN_PASSWORD not set, skipping default admin creation");
+      return;
+    }
 
-  const existing = await prisma.adminUser.findUnique({ where: { email } });
-  if (existing) return;
+    const existing = await prisma.adminUser.findUnique({ where: { email } });
+    if (existing) return;
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.adminUser.create({
-    data: {
-      email,
-      passwordHash,
-    },
-  });
+    const passwordHash = await bcrypt.hash(password, 10);
+    await prisma.adminUser.create({
+      data: {
+        email,
+        passwordHash,
+      },
+    });
+    console.log("Default admin user created successfully");
+  } catch (error) {
+    console.error("Error ensuring default admin user:", error);
+    // Don't throw - allow the app to continue even if default admin creation fails
+  }
 }
 
 export function createAdminToken(user: { id: string; email: string }) {
