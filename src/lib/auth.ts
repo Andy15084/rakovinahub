@@ -20,13 +20,24 @@ function getJwtSecret(): string {
 
 export async function authenticateAdmin(email: string, password: string) {
   try {
+    console.log(`Attempting to authenticate admin with email: ${email}`);
+    
     const user = await prisma.adminUser.findUnique({ where: { email } });
+    
     if (!user) {
       console.log(`Admin user not found for email: ${email}`);
+      // Check if any admin users exist at all
+      const allUsers = await prisma.adminUser.findMany({ select: { email: true } });
+      console.log(`Total admin users in database: ${allUsers.length}`);
+      if (allUsers.length > 0) {
+        console.log(`Existing admin emails: ${allUsers.map(u => u.email).join(", ")}`);
+      }
       return null;
     }
 
+    console.log(`Admin user found: ${user.id}, comparing password...`);
     const match = await bcrypt.compare(password, user.passwordHash);
+    
     if (!match) {
       console.log(`Password mismatch for email: ${email}`);
       return null;
@@ -36,6 +47,9 @@ export async function authenticateAdmin(email: string, password: string) {
     return user;
   } catch (error) {
     console.error("Error in authenticateAdmin:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error details:", { errorMessage, errorStack });
     throw error;
   }
 }
