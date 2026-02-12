@@ -19,13 +19,25 @@ function getJwtSecret(): string {
 }
 
 export async function authenticateAdmin(email: string, password: string) {
-  const user = await prisma.adminUser.findUnique({ where: { email } });
-  if (!user) return null;
+  try {
+    const user = await prisma.adminUser.findUnique({ where: { email } });
+    if (!user) {
+      console.log(`Admin user not found for email: ${email}`);
+      return null;
+    }
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) return null;
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) {
+      console.log(`Password mismatch for email: ${email}`);
+      return null;
+    }
 
-  return user;
+    console.log(`Admin user authenticated successfully: ${email}`);
+    return user;
+  } catch (error) {
+    console.error("Error in authenticateAdmin:", error);
+    throw error;
+  }
 }
 
 export async function ensureDefaultAdminUser() {
