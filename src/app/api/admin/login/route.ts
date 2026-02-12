@@ -1,30 +1,41 @@
 import { NextResponse } from "next/server";
-import { authenticateAdmin, createAdminToken, setAdminAuthCookie } from "@/lib/auth";
+import { authenticateAdmin, createAdminToken, setAdminAuthCookie, ensureDefaultAdminUser } from "@/lib/auth";
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
+  try {
+    // Ensure default admin user exists before attempting login
+    await ensureDefaultAdminUser();
 
-  const email = body?.email;
-  const password = body?.password;
+    const body = await request.json().catch(() => null);
 
-  if (typeof email !== "string" || typeof password !== "string") {
+    const email = body?.email;
+    const password = body?.password;
+
+    if (typeof email !== "string" || typeof password !== "string") {
+      return NextResponse.json(
+        { message: "Neplatné prihlasovacie údaje." },
+        { status: 400 },
+      );
+    }
+
+    const user = await authenticateAdmin(email, password);
+    if (!user) {
+      return NextResponse.json(
+        { message: "Nesprávny e‑mail alebo heslo." },
+        { status: 401 },
+      );
+    }
+
+    const token = createAdminToken({ id: user.id, email: user.email });
+    await setAdminAuthCookie(token);
+
+    return NextResponse.json({ message: "Prihlásenie úspešné." });
+  } catch (error) {
+    console.error("Login error:", error);
     return NextResponse.json(
-      { message: "Neplatné prihlasovacie údaje." },
-      { status: 400 },
+      { message: "Chyba pri prihlásení. Skúste to znova." },
+      { status: 500 },
     );
   }
-
-  const user = await authenticateAdmin(email, password);
-  if (!user) {
-    return NextResponse.json(
-      { message: "Nesprávny e‑mail alebo heslo." },
-      { status: 401 },
-    );
-  }
-
-  const token = createAdminToken({ id: user.id, email: user.email });
-  await setAdminAuthCookie(token);
-
-  return NextResponse.json({ message: "Prihlásenie úspešné." });
 }
 
