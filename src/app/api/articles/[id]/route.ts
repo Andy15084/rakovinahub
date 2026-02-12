@@ -29,18 +29,28 @@ const updateSchema = z
 
 export async function GET(_request: Request, { params }: RouteParams) {
   const { id } = await params;
+  const admin = await getCurrentAdmin();
+  
   const article = await prisma.article.findUnique({
     where: { id },
   });
 
-  if (!article || !article.isPublished) {
+  if (!article) {
     return NextResponse.json({ message: "Článok nenájdený." }, { status: 404 });
   }
 
-  await prisma.article.update({
-    where: { id },
-    data: { viewCount: { increment: 1 } },
-  });
+  // Admin can see all articles, public users only published ones
+  if (!admin && !article.isPublished) {
+    return NextResponse.json({ message: "Článok nenájdený." }, { status: 404 });
+  }
+
+  // Only increment view count for published articles viewed by non-admin users
+  if (!admin && article.isPublished) {
+    await prisma.article.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+    });
+  }
 
   return NextResponse.json(article);
 }
