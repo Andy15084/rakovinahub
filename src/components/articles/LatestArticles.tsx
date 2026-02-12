@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { Calendar, Eye } from "lucide-react";
+import { categoryLabels } from "@/config/labels";
 
 async function getLatestArticles() {
   try {
@@ -16,9 +17,8 @@ async function getLatestArticles() {
       select: {
         id: true,
         title: true,
-        excerpt: true,
-        cancerType: true,
-        category: true,
+        cancerTypes: true,
+        categories: true,
         publishedAt: true,
         viewCount: true,
         imageUrl: true,
@@ -78,21 +78,20 @@ export async function LatestArticles() {
               )}
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded-full bg-orange-100 px-2 py-1 font-medium text-orange-800">
-                    {article.cancerType}
-                  </span>
-                  <span className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-800">
-                    {article.category}
-                  </span>
+                  {(article.cancerTypes || []).slice(0, 2).map((c) => (
+                    <span key={c} className="rounded-full bg-orange-100 px-2 py-1 font-medium text-orange-800">
+                      {c}
+                    </span>
+                  ))}
+                  {(article.categories || []).slice(0, 1).map((c) => (
+                    <span key={c} className="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-800">
+                      {categoryLabels[c] ?? c}
+                    </span>
+                  ))}
                 </div>
                 <h3 className="line-clamp-2 text-lg font-semibold text-slate-900 group-hover:text-orange-700">
                   {article.title}
                 </h3>
-                {article.excerpt && (
-                  <p className="line-clamp-2 text-sm text-slate-600">
-                    {article.excerpt}
-                  </p>
-                )}
                 <div className="flex items-center gap-4 pt-2 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />

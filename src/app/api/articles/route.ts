@@ -44,16 +44,15 @@ export async function GET(request: Request) {
       isPublished: true,
     };
 
-    if (cancerType) where.cancerType = cancerType;
-    if (stage) where.stage = stage;
-    if (category) where.category = category;
-    if (treatmentType) where.treatmentType = treatmentType;
+    if (cancerType) where.cancerTypes = { has: cancerType };
+    if (stage) where.stages = { has: stage };
+    if (category) where.categories = { has: category };
+    if (treatmentType) where.treatmentTypes = { has: treatmentType };
     if (tags) where.tags = { hasSome: tags.split(",").map((t) => t.trim()) };
 
     if (q) {
       where.OR = [
         { title: { contains: q, mode: "insensitive" } },
-        { excerpt: { contains: q, mode: "insensitive" } },
         { content: { contains: q, mode: "insensitive" } },
         { tags: { hasSome: [q] } },
       ];
@@ -79,11 +78,10 @@ export async function GET(request: Request) {
           select: {
             id: true,
             title: true,
-            excerpt: true,
-            cancerType: true,
-            stage: true,
-            category: true,
-            treatmentType: true,
+            cancerTypes: true,
+            stages: true,
+            categories: true,
+            treatmentTypes: true,
             tags: true,
             publishedAt: true,
             viewCount: true,
@@ -113,12 +111,11 @@ export async function GET(request: Request) {
 const articleBodySchema = z.object({
   title: z.string().min(3),
   slug: z.string().min(3),
-  excerpt: z.string().optional(),
   content: z.string().min(10),
-  cancerType: z.string().min(1),
-  stage: z.string().optional(),
-  category: z.string().min(1),
-  treatmentType: z.string().optional(),
+  cancerTypes: z.array(z.string()).min(1),
+  stages: z.array(z.string()).optional(),
+  categories: z.array(z.string()).min(1),
+  treatmentTypes: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   videoUrl: z.string().url().optional().or(z.literal("")),
@@ -146,10 +143,10 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       console.error("Validation error:", parsed.error.issues);
       return NextResponse.json(
-        { 
-          message: "Neplatné údaje článku.", 
+        {
+          message: "Neplatné údaje článku.",
           issues: parsed.error.issues,
-          received: json 
+          received: json,
         },
         { status: 400 },
       );
@@ -158,25 +155,15 @@ export async function POST(request: Request) {
     const data = parsed.data;
 
     try {
-      console.log("Creating article with data:", {
-        title: data.title,
-        slug: data.slug,
-        cancerType: data.cancerType,
-        stage: data.stage,
-        category: data.category,
-        treatmentType: data.treatmentType,
-      });
-
       const article = await prisma.article.create({
         data: {
           title: data.title,
           slug: data.slug,
-          excerpt: data.excerpt,
           content: data.content,
-          cancerType: data.cancerType,
-          stage: data.stage as any,
-          category: data.category as any,
-          treatmentType: data.treatmentType as any,
+          cancerTypes: data.cancerTypes,
+          stages: (data.stages ?? []) as any[],
+          categories: data.categories as any[],
+          treatmentTypes: (data.treatmentTypes ?? []) as any[],
           tags: data.tags ?? [],
           imageUrl: data.imageUrl || null,
           videoUrl: data.videoUrl || null,
@@ -186,38 +173,22 @@ export async function POST(request: Request) {
         },
       });
 
-      console.log("Article created successfully:", article.id);
       return NextResponse.json(article, { status: 201 });
     } catch (dbError: any) {
       console.error("Database error creating article:", dbError);
       const errorMessage = dbError?.message || "Unknown database error";
       const errorCode = dbError?.code || "UNKNOWN";
       const meta = dbError?.meta || {};
-      
-      // Handle specific Prisma errors
+
       let userMessage = "Chyba pri ukladaní článku do databázy.";
       if (errorCode === "P2002") {
-        userMessage = `Duplicitný záznam. ${meta.target ? `Pole ${meta.target.join(", ")} už existuje.` : "Slug alebo iné pole už existuje."}`;
-      } else if (errorCode === "P2003") {
-        userMessage = `Neplatná referencia. ${meta.field_name ? `Pole ${meta.field_name} obsahuje neplatnú hodnotu.` : ""}`;
+        userMessage = `Duplicitný záznam. Slug už existuje.`;
       } else if (errorMessage.includes("does not exist")) {
-        userMessage = "Tabuľka Article neexistuje v databáze. Spustite migrácie.";
+        userMessage = "Tabuľka Article neexistuje. Spustite migrácie.";
       }
 
       return NextResponse.json(
-        { 
-          message: userMessage,
-          error: errorMessage,
-          code: errorCode,
-          meta: meta,
-          receivedData: {
-            title: data.title,
-            slug: data.slug,
-            category: data.category,
-            stage: data.stage,
-            treatmentType: data.treatmentType,
-          }
-        },
+        { message: userMessage, error: errorMessage, code: errorCode, meta },
         { status: 500 },
       );
     }
@@ -225,12 +196,8 @@ export async function POST(request: Request) {
     console.error("Error in POST /api/articles:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { 
-        message: "Chyba pri vytváraní článku.",
-        error: errorMessage 
-      },
+      { message: "Chyba pri vytváraní článku.", error: errorMessage },
       { status: 500 },
     );
   }
 }
-

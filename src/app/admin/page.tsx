@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { categoryLabels } from "@/config/labels";
 
 async function getData() {
   try {
@@ -22,8 +23,8 @@ async function getData() {
         select: {
           id: true,
           title: true,
-          cancerType: true,
-          category: true,
+          cancerTypes: true,
+          categories: true,
           isPublished: true,
           publishedAt: true,
         },
@@ -93,7 +94,7 @@ export default async function AdminPage() {
                   {article.title}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {article.cancerType} · {article.category}
+                  {(article.cancerTypes || []).join(", ") || "—"} · {(article.categories || []).map((c) => categoryLabels[c] ?? c).join(", ") || "—"}
                 </p>
               </div>
               <div className="flex items-center gap-2">

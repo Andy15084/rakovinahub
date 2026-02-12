@@ -11,12 +11,11 @@ const updateSchema = z
   .object({
     title: z.string().min(3).optional(),
     slug: z.string().min(3).optional(),
-    excerpt: z.string().optional(),
     content: z.string().min(10).optional(),
-    cancerType: z.string().min(1).optional(),
-    stage: z.string().optional(),
-    category: z.string().min(1).optional(),
-    treatmentType: z.string().optional(),
+    cancerTypes: z.array(z.string()).optional(),
+    stages: z.array(z.string()).optional(),
+    categories: z.array(z.string()).optional(),
+    treatmentTypes: z.array(z.string()).optional(),
     tags: z.array(z.string()).optional(),
     imageUrl: z.string().url().optional().or(z.literal("")),
     videoUrl: z.string().url().optional().or(z.literal("")),
@@ -74,22 +73,24 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const data = parsed.data;
 
+  const updateData: any = { ...data };
+  delete updateData.excerpt;
+  if (data.cancerTypes !== undefined) updateData.cancerTypes = data.cancerTypes;
+  if (data.stages !== undefined) updateData.stages = data.stages as any[];
+  if (data.categories !== undefined) updateData.categories = data.categories as any[];
+  if (data.treatmentTypes !== undefined) updateData.treatmentTypes = data.treatmentTypes as any[];
+  updateData.imageUrl = data.imageUrl || null;
+  updateData.videoUrl = data.videoUrl || null;
+  updateData.publishedAt =
+    typeof data.isPublished === "boolean"
+      ? data.isPublished
+        ? new Date()
+        : null
+      : undefined;
+
   const article = await prisma.article.update({
     where: { id },
-    data: {
-      ...data,
-      stage: data.stage as any,
-      category: data.category as any,
-      treatmentType: data.treatmentType as any,
-      imageUrl: data.imageUrl || null,
-      videoUrl: data.videoUrl || null,
-      publishedAt:
-        typeof data.isPublished === "boolean"
-          ? data.isPublished
-            ? new Date()
-            : null
-          : undefined,
-    },
+    data: updateData,
   });
 
   return NextResponse.json(article);

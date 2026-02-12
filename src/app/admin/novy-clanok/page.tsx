@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { cancerTypes, treatmentTypes } from "@/config/taxonomy";
+import { cn } from "@/lib/utils";
 
 const categories = [
   { value: "DIAGNOSTICS", label: "Diagnostika" },
@@ -21,31 +23,78 @@ const categories = [
   { value: "SUPPORT_SERVICES", label: "Pomoc a podpora" },
 ] as const;
 
+const stages = [
+  { value: "STAGE_0", label: "Štádium 0" },
+  { value: "STAGE_I", label: "Štádium I" },
+  { value: "STAGE_II", label: "Štádium II" },
+  { value: "STAGE_III", label: "Štádium III" },
+  { value: "STAGE_IV", label: "Štádium IV" },
+  { value: "UNKNOWN", label: "Neviem" },
+] as const;
+
+const treatmentEnumMap: Record<string, string> = {
+  Diagnostika: "DIAGNOSTICS",
+  Biopsia: "BIOPSY",
+  Operácia: "SURGERY",
+  Chemoterapia: "CHEMOTHERAPY",
+  Rádioterapia: "RADIOTHERAPY",
+  Imunoterapia: "IMMUNOTHERAPY",
+  "Cielená liečba": "TARGETED_THERAPY",
+  "Hormonálna liečba": "HORMONE_THERAPY",
+  "Kontrolné vyšetrenia": "FOLLOW_UP",
+  "Remisia a sledovanie": "REMISSION",
+};
+
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 export default function NewArticlePage() {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [content, setContent] = useState("");
+  const [selectedCancers, setSelectedCancers] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedStages, setSelectedStages] = useState<string[]>([]);
+  const [selectedTreatments, setSelectedTreatments] = useState<string[]>([]);
 
-  const handleSubmit = async (formData: FormData) => {
+  const toggleMulti = (
+    arr: string[],
+    set: (v: string[]) => void,
+    value: string
+  ) => {
+    set(arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setSaving(true);
     setError(null);
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const body = {
       title: String(formData.get("title") ?? ""),
       slug: String(formData.get("slug") ?? ""),
-      excerpt: String(formData.get("excerpt") ?? ""),
-      content: String(formData.get("content") ?? ""),
-      cancerType: String(formData.get("cancerType") ?? ""),
-      stage: String(formData.get("stage") ?? "") || undefined,
-      category: String(formData.get("category") ?? ""),
-      treatmentType: String(formData.get("treatmentType") ?? "") || undefined,
-      tags:
-        String(formData.get("tags") ?? "")
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean) ?? [],
-      imageUrl: String(formData.get("imageUrl") ?? ""),
-      videoUrl: String(formData.get("videoUrl") ?? ""),
+      content,
+      cancerTypes: selectedCancers,
+      stages: selectedStages,
+      categories: selectedCategories,
+      treatmentTypes: selectedTreatments,
+      tags: String(formData.get("tags") ?? "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      imageUrl: String(formData.get("imageUrl") ?? "") || undefined,
+      videoUrl: String(formData.get("videoUrl") ?? "") || undefined,
       isDraft: formData.get("status") === "draft",
       isPublished: formData.get("status") === "published",
     };
@@ -59,10 +108,7 @@ export default function NewArticlePage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        const errorMessage = data?.message || data?.error || "Uloženie článku zlyhalo.";
-        const issues = data?.issues ? `\nDetaily: ${JSON.stringify(data.issues, null, 2)}` : "";
-        setError(`${errorMessage}${issues}`);
-        console.error("Error saving article:", data);
+        setError(data?.message || "Uloženie článku zlyhalo.");
       } else {
         router.push("/admin");
         router.refresh();
@@ -75,212 +121,226 @@ export default function NewArticlePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Nový článok
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Vyplňte štruktúrované informácie, aby bolo možné článok inteligentne
-            filtrovať.
-          </p>
-        </div>
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">Nový článok</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Vyplňte informácie a vložte obsah. Môžete vložiť text z Wordu vrátane obrázkov.
+        </p>
       </div>
 
-      <Card className="space-y-5">
-        <form
-          className="space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit(new FormData(e.currentTarget));
-          }}
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
+        <Card className="p-6 space-y-6 rounded-2xl border-slate-200 bg-white shadow-sm">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
                 Názov článku
               </label>
               <input
                 name="title"
                 required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+                onChange={(e) => {
+                  const slug = formRef.current?.querySelector('[name="slug"]') as HTMLInputElement;
+                  if (slug && !slug.value) slug.value = slugify(e.target.value);
+                }}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
+                placeholder="Zadajte názov"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
                 Slug (URL)
               </label>
               <input
                 name="slug"
                 required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
+                placeholder="url-clanku"
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-              Krátky úvod / perex
-            </label>
-            <textarea
-              name="excerpt"
-              rows={3}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Obsah článku
             </label>
-            <textarea
-              name="content"
-              rows={8}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+            <p className="text-xs text-slate-500 mb-2">
+              Vložte text z Wordu alebo iného editora. Formátovanie a obrázky sa zachovajú.
+            </p>
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              minHeight="400px"
             />
           </div>
+        </Card>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                Typ rakoviny
-              </label>
-              <select
-                name="cancerType"
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
-              >
-                <option value="">Vyberte</option>
-                {cancerTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                Štádium
-              </label>
-              <select
-                name="stage"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
-              >
-                <option value="">Nezadané</option>
-                <option value="STAGE_0">Štádium 0</option>
-                <option value="STAGE_I">Štádium I</option>
-                <option value="STAGE_II">Štádium II</option>
-                <option value="STAGE_III">Štádium III</option>
-                <option value="STAGE_IV">Štádium IV</option>
-                <option value="UNKNOWN">Neviem</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                Kategória
-              </label>
-              <select
-                name="category"
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
-              >
-                <option value="">Vyberte</option>
-                {categories.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+        <Card className="p-6 space-y-6 rounded-2xl border-slate-200 bg-white shadow-sm">
+          <h2 className="text-lg font-medium text-slate-900">Metadáta</h2>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Typy rakoviny (viacero)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {cancerTypes.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleMulti(selectedCancers, setSelectedCancers, type)}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm font-medium transition",
+                    selectedCancers.includes(type)
+                      ? "bg-orange-100 text-orange-800 border border-orange-200"
+                      : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+                  )}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                Typ liečby (voliteľné)
-              </label>
-              <select
-                name="treatmentType"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
-              >
-                <option value="">Neurčené</option>
-                {treatmentTypes.map((t) => (
-                  <option key={t} value={t.toUpperCase().replace(/ /g, "_")}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Kategórie (viacero)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => toggleMulti(selectedCategories, setSelectedCategories, cat.value)}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm font-medium transition",
+                    selectedCategories.includes(cat.value)
+                      ? "bg-orange-100 text-orange-800 border border-orange-200"
+                      : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+                  )}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                Tagy
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Štádiá (voliteľné)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {stages.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => toggleMulti(selectedStages, setSelectedStages, s.value)}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-sm font-medium transition",
+                    selectedStages.includes(s.value)
+                      ? "bg-orange-100 text-orange-800 border border-orange-200"
+                      : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Typy liečby (voliteľné)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {treatmentTypes.map((t) => {
+                const val = treatmentEnumMap[t] ?? t.toUpperCase().replace(/ /g, "_");
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => toggleMulti(selectedTreatments, setSelectedTreatments, val)}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-sm font-medium transition",
+                      selectedTreatments.includes(val)
+                        ? "bg-orange-100 text-orange-800 border border-orange-200"
+                        : "bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+                    )}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Tagy (čiarkou oddelené)
               </label>
               <input
                 name="tags"
-                placeholder="napr. diagnostika, vedľajšie účinky"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+                defaultValue=""
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
+                placeholder="diagnostika, liečba"
               />
-              <p className="text-xs text-slate-500">
-                Viac tagov oddeľte čiarkou. Pomáhajú pri vyhľadávaní.
-              </p>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
                 Stav
               </label>
               <select
                 name="status"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
                 defaultValue="draft"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
               >
-                <option value="draft">Uložiť ako koncept</option>
+                <option value="draft">Koncept</option>
                 <option value="published">Publikovať</option>
               </select>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                URL obrázka (voliteľné)
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                URL obrázka
               </label>
               <input
                 name="imageUrl"
                 type="url"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
+                placeholder="https://"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-slate-700">
-                URL videa (YouTube a pod., voliteľné)
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                URL videa
               </label>
               <input
                 name="videoUrl"
                 type="url"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-sky-700 ring-offset-2 focus:border-sky-500 focus:ring-2"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none transition"
+                placeholder="https://youtube.com/..."
               />
             </div>
           </div>
+        </Card>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push("/admin")}
-            >
-              Zrušiť
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Ukladám…" : "Uložiť článok"}
-            </Button>
+        {error && (
+          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            {error}
           </div>
-        </form>
-      </Card>
+        )}
+
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" type="button" onClick={() => router.push("/admin")}>
+            Zrušiť
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Ukladám…" : "Uložiť článok"}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
-
