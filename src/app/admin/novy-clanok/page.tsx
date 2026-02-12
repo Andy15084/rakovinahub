@@ -59,7 +59,10 @@ export default function NewArticlePage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.message ?? "Uloženie článku zlyhalo.");
+        const errorMessage = data?.message || data?.error || "Uloženie článku zlyhalo.";
+        const issues = data?.issues ? `\nDetaily: ${JSON.stringify(data.issues, null, 2)}` : "";
+        setError(`${errorMessage}${issues}`);
+        console.error("Error saving article:", data);
       } else {
         router.push("/admin");
         router.refresh();

@@ -127,42 +127,78 @@ const articleBodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const admin = await getCurrentAdmin();
-  if (!admin) {
-    return NextResponse.json({ message: "Neautorizovaný prístup." }, { status: 401 });
-  }
+  try {
+    const admin = await getCurrentAdmin();
+    if (!admin) {
+      return NextResponse.json({ message: "Neautorizovaný prístup." }, { status: 401 });
+    }
 
-  const json = await request.json().catch(() => null);
-  const parsed = articleBodySchema.safeParse(json);
+    const json = await request.json().catch(() => null);
+    if (!json) {
+      return NextResponse.json(
+        { message: "Neplatný JSON v request body." },
+        { status: 400 },
+      );
+    }
 
-  if (!parsed.success) {
+    const parsed = articleBodySchema.safeParse(json);
+
+    if (!parsed.success) {
+      console.error("Validation error:", parsed.error.issues);
+      return NextResponse.json(
+        { 
+          message: "Neplatné údaje článku.", 
+          issues: parsed.error.issues,
+          received: json 
+        },
+        { status: 400 },
+      );
+    }
+
+    const data = parsed.data;
+
+    try {
+      const article = await prisma.article.create({
+        data: {
+          title: data.title,
+          slug: data.slug,
+          excerpt: data.excerpt,
+          content: data.content,
+          cancerType: data.cancerType,
+          stage: data.stage as any,
+          category: data.category as any,
+          treatmentType: data.treatmentType as any,
+          tags: data.tags ?? [],
+          imageUrl: data.imageUrl || null,
+          videoUrl: data.videoUrl || null,
+          isDraft: data.isDraft ?? true,
+          isPublished: data.isPublished ?? false,
+          publishedAt: data.isPublished ? new Date() : null,
+        },
+      });
+
+      return NextResponse.json(article, { status: 201 });
+    } catch (dbError) {
+      console.error("Database error creating article:", dbError);
+      const errorMessage = dbError instanceof Error ? dbError.message : "Unknown database error";
+      return NextResponse.json(
+        { 
+          message: "Chyba pri ukladaní článku do databázy.",
+          error: errorMessage 
+        },
+        { status: 500 },
+      );
+    }
+  } catch (error) {
+    console.error("Error in POST /api/articles:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { message: "Neplatné údaje článku.", issues: parsed.error.issues },
-      { status: 400 },
+      { 
+        message: "Chyba pri vytváraní článku.",
+        error: errorMessage 
+      },
+      { status: 500 },
     );
   }
-
-  const data = parsed.data;
-
-  const article = await prisma.article.create({
-    data: {
-      title: data.title,
-      slug: data.slug,
-      excerpt: data.excerpt,
-      content: data.content,
-      cancerType: data.cancerType,
-      stage: data.stage as any,
-      category: data.category as any,
-      treatmentType: data.treatmentType as any,
-      tags: data.tags ?? [],
-      imageUrl: data.imageUrl || null,
-      videoUrl: data.videoUrl || null,
-      isDraft: data.isDraft ?? true,
-      isPublished: data.isPublished ?? false,
-      publishedAt: data.isPublished ? new Date() : null,
-    },
-  });
-
-  return NextResponse.json(article, { status: 201 });
 }
 
