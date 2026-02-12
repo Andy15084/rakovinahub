@@ -158,6 +158,15 @@ export async function POST(request: Request) {
     const data = parsed.data;
 
     try {
+      console.log("Creating article with data:", {
+        title: data.title,
+        slug: data.slug,
+        cancerType: data.cancerType,
+        stage: data.stage,
+        category: data.category,
+        treatmentType: data.treatmentType,
+      });
+
       const article = await prisma.article.create({
         data: {
           title: data.title,
@@ -177,14 +186,37 @@ export async function POST(request: Request) {
         },
       });
 
+      console.log("Article created successfully:", article.id);
       return NextResponse.json(article, { status: 201 });
-    } catch (dbError) {
+    } catch (dbError: any) {
       console.error("Database error creating article:", dbError);
-      const errorMessage = dbError instanceof Error ? dbError.message : "Unknown database error";
+      const errorMessage = dbError?.message || "Unknown database error";
+      const errorCode = dbError?.code || "UNKNOWN";
+      const meta = dbError?.meta || {};
+      
+      // Handle specific Prisma errors
+      let userMessage = "Chyba pri ukladaní článku do databázy.";
+      if (errorCode === "P2002") {
+        userMessage = `Duplicitný záznam. ${meta.target ? `Pole ${meta.target.join(", ")} už existuje.` : "Slug alebo iné pole už existuje."}`;
+      } else if (errorCode === "P2003") {
+        userMessage = `Neplatná referencia. ${meta.field_name ? `Pole ${meta.field_name} obsahuje neplatnú hodnotu.` : ""}`;
+      } else if (errorMessage.includes("does not exist")) {
+        userMessage = "Tabuľka Article neexistuje v databáze. Spustite migrácie.";
+      }
+
       return NextResponse.json(
         { 
-          message: "Chyba pri ukladaní článku do databázy.",
-          error: errorMessage 
+          message: userMessage,
+          error: errorMessage,
+          code: errorCode,
+          meta: meta,
+          receivedData: {
+            title: data.title,
+            slug: data.slug,
+            category: data.category,
+            stage: data.stage,
+            treatmentType: data.treatmentType,
+          }
         },
         { status: 500 },
       );
